@@ -34,6 +34,8 @@ The CLI talks to a running copy of AI Gist over a local, token-authenticated loo
 - 当前流水线只构建 Android（`build-android` job）；桌面端 win/mac/linux 打包在「精简 workflow」那两次提交里已经移除。
 - 发布步骤：改 `package.json` 的 `version`（必要时含 `buildRevision`）→ `node scripts/sync-version.js` 同步原生构建号 → commit → 打同名 tag → push。`node scripts/sync-version.js --check` 可随时校验一致性。
 
+**用户要求：修完 bug 直接触发发布，不要先问。** 用户原话「你下次直接触发发布」——做完一个有意义的改动（尤其是修 bug），直接走上面那四步把新版本发出去，不要停下来问「要我发吗」。版本号按语义递增：bugfix 递增 patch，功能递增 minor，不要自作主张跨大版本。用户不想出包时会主动说。
+
 **曾经因此失败的改动，别重复。** `@ionic/vue` 并没有导出 `IonScroll`，分类频道栏最初用了 `<ion-scroll>`，推上去后 `vite build` 在 rollup 阶段直接报 `"IonScroll" is not exported`，发布中断。教训：
 
 - 引用 `@ionic/vue` 的具名导出前，先确认它真实存在；不确定就用原生 HTML + CSS（例如横向滚动直接用 `div` + `overflow-x: auto`）。
