@@ -87,6 +87,34 @@ describe('移动端提示词页顶部分类频道栏', () => {
     expect(promptPage).toMatch(/watch\(categories, async \(\) => \{[\s\S]*?selectedCategory\.value = null[\s\S]*?loadPrompts\(\)/)
   })
 
+  it('点击频道切换分类后列表会重新加载', () => {
+    // 频道栏只通过 v-model:selected-id 改 selectedCategory，自己不触发加载；
+    // 如果 selectedCategory 不在筛选 watch 里，点频道只会移动高亮、列表原地不动。
+    expect(promptPage).toMatch(/watch\(\[selectedCategory, showFavoritesOnly, selectedTag\]/)
+  })
+
+  it('选中的分类只占频道栏一行，筛选标签行不重复显示同一个分类名', () => {
+    const chipsBlock = promptPage.slice(
+      promptPage.indexOf('class="filter-chips"'),
+      promptPage.indexOf('class="mobile-list-toolbar"')
+    )
+
+    expect(chipsBlock).not.toContain('selectedCategory')
+    expect(chipsBlock).not.toContain('getCategoryName')
+    expect(chipsBlock).toContain('v-if="showFavoritesOnly"')
+    expect(chipsBlock).toContain('v-if="selectedTag"')
+  })
+
+  it('只有分类筛选时不渲染空的筛选标签行', () => {
+    const chipsComputed = promptPage.match(
+      /const hasVisibleFilterChips = computed\(\(\) => \{[\s\S]*?\n\}\)/
+    )?.[0] || ''
+
+    expect(chipsComputed).toContain('showFavoritesOnly')
+    expect(chipsComputed).toContain('selectedTag')
+    expect(chipsComputed).not.toContain('selectedCategory')
+  })
+
   it('分类、提示词与 AI 配置并行加载', () => {
     expect(promptPage).toMatch(/await Promise\.all\([\s\S]*?loadCategories\(\),[\s\S]*?loadPrompts\(\),[\s\S]*?refreshAIConfigStatus\(\)/)
   })

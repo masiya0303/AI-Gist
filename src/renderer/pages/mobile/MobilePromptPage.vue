@@ -66,12 +66,12 @@
         :counts="categoryCounts"
       ></mobile-category-bar>
 
-      <!-- 筛选标签 -->
-      <div v-if="hasActiveFilters" class="filter-chips">
-        <ion-chip v-if="selectedCategory" @click="clearCategory">
-          <ion-label>{{ getCategoryName(selectedCategory) }}</ion-label>
-          <ion-icon :icon="closeCircle"></ion-icon>
-        </ion-chip>
+      <!--
+        筛选标签：只展示频道栏管不到的筛选（收藏、标签）。
+        选中的分类不在这里重复显示——分类频道栏本身就高亮着当前分类，
+        点这里等于在页面上出现两行同一个分类名。
+      -->
+      <div v-if="hasVisibleFilterChips" class="filter-chips">
         <ion-chip v-if="showFavoritesOnly" @click="showFavoritesOnly = false">
           <ion-label>{{ t('promptManagement.favorites') }}</ion-label>
           <ion-icon :icon="closeCircle"></ion-icon>
@@ -402,6 +402,14 @@ const hasActiveFilters = computed(() => {
   return selectedCategory.value !== null || showFavoritesOnly.value || selectedTag.value !== null
 })
 
+// 是否有需要以标签形式展示的筛选。
+// 分类不在这行里：它由顶部分类频道栏负责展示和切换（点「全部分类」即清除），
+// 在这里再放一个分类标签会变成页面上两行同一个分类名。
+// 这一行只在有收藏/标签筛选时才渲染，避免出现一个空容器占位。
+const hasVisibleFilterChips = computed(() => {
+  return showFavoritesOnly.value || selectedTag.value !== null
+})
+
 // 是否处于搜索或筛选状态：用于区分「完全没有数据」与「搜索/筛选后没有匹配结果」两种空状态
 const isSearchOrFilterActive = computed(() => {
   return hasActiveFilters.value || searchText.value.trim().length > 0
@@ -530,23 +538,18 @@ const loadMore = async (event: any) => {
   event.target.complete()
 }
 
-// 分类筛选
+// 分类筛选（漏斗图标弹层里的分类项走这里）。
+// 不在此处调用 loadPrompts：selectedCategory 的 watch 统一负责重新加载，
+// 两处都调会让同一次选择触发两次查询。
 const handleCategoryFilter = (categoryId: number | null) => {
   selectedCategory.value = categoryId
   showFilterModal.value = false
-  loadPrompts()
 }
 
 // 导航到分类管理页面
 const navigateToCategories = () => {
   showFilterModal.value = false
   router.push('/categories')
-}
-
-// 清除分类筛选
-const clearCategory = () => {
-  selectedCategory.value = null
-  loadPrompts()
 }
 
 // 清除搜索词和全部筛选条件（搜索/筛选后无匹配结果时的空状态操作）
@@ -624,8 +627,10 @@ const handleDelete = async (prompt: Prompt) => {
   await alert.present()
 }
 
-// 监听筛选变化
-watch([showFavoritesOnly, selectedTag], () => {
+// 监听筛选变化。
+// selectedCategory 必须在这里：分类频道栏通过 v-model:selected-id 直接改它，
+// 不调用任何 handler，如果不监听，点频道只移动高亮、列表不会重新加载。
+watch([selectedCategory, showFavoritesOnly, selectedTag], () => {
   loadPrompts()
 })
 
