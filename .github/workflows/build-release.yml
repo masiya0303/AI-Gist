@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
-      release_created: ${{ steps.existing_release.outputs.exists == 'false' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -108,7 +107,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.get_version.outputs.version }}
           name: AI Gist ${{ steps.get_version.outputs.version }}
-          draft: true
+          draft: false
           prerelease: false
           generate_release_notes: true
 
