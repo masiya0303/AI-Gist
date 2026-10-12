@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（例如 v0.1.1；留空使用 package.json）'
+        description: '版本号（例如 v0.1.1；留空使用 package.json）；store 构建 Windows Store；mac-store 上传 Mac App Store；linux-store-build 仅构建 Snap；linux-store 发布 Snap stable'
         required: false
         default: ''
 
@@ -16,10 +16,202 @@ permissions:
   contents: write
 
 jobs:
+  build-windows-store:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.version == 'store'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Build unsigned Microsoft Store packages
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: yarn build:store:win
+
+      - name: Upload Microsoft Store packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-store-packages
+          path: dist/AI-Gist-*-Windows-Store-*.appx
+          if-no-files-found: error
+
+  build-mac-store:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.version == 'mac-store'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Install Mac App Store signing certificates
+        env:
+          MAS_APP_CERT_P12_BASE64: ${{ secrets.MAS_APP_CERT_P12_BASE64 }}
+          MAS_APP_CERT_PASSWORD: ${{ secrets.MAS_APP_CERT_PASSWORD }}
+          MAS_INSTALLER_CERT_P12_BASE64: ${{ secrets.MAS_INSTALLER_CERT_P12_BASE64 }}
+          MAS_INSTALLER_CERT_PASSWORD: ${{ secrets.MAS_INSTALLER_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/mac-app-store-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 24)
+          printf '%s' "$MAS_APP_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/mas-app.p12"
+          printf '%s' "$MAS_INSTALLER_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/mas-installer.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/mas-app.p12" -P "$MAS_APP_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/mas-installer.p12" -P "$MAS_INSTALLER_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Install Mac App Store provisioning profile
+        env:
+          MAS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          MAS_PROVISIONING_PROFILE_PATH="$RUNNER_TEMP/AI_Gist_Mac_App_Store.provisionprofile"
+          printf '%s' "$MAS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$MAS_PROVISIONING_PROFILE_PATH"
+          security cms -D -i "$MAS_PROVISIONING_PROFILE_PATH" > "$RUNNER_TEMP/mas-profile.plist"
+          PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$RUNNER_TEMP/mas-profile.plist")
+          if [[ "$PROFILE_APP_ID" != '9T93J5B7N6.com.getaigist.app' ]]; then
+            echo "::error::Unexpected Mac App Store provisioning profile: $PROFILE_APP_ID"
+            exit 1
+          fi
+          echo "MAS_PROVISIONING_PROFILE_PATH=$MAS_PROVISIONING_PROFILE_PATH" >> "$GITHUB_ENV"
+
+      - name: Build signed Mac App Store package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: true
+          PYTHON: python3
+          npm_config_python: python3
+        run: |
+          node scripts/build.js
+          # Mac 的 CFBundleVersion 必须比这个 app **历史上**上传过的最大值更高，
+          # 跟营销版本号无关（iOS 才是按版本串比较），否则上传报 90061/-19241。
+          # 所以这里用 --mac-build（把版本号编成 2010101 这样的长整数，见
+          # scripts/version.js），不能用 --build 的 buildRevision——它每个版本
+          # 号从 1 重新数，会低于历史遗留的 run_number 水位。营销版本号
+          # （CFBundleShortVersionString）就是 package.json 的 version，商店里
+          # 显示为 "2.1.1 (2010101)" 的形式，用户看到的只有 2.1.1。
+          BUILD_NUMBER=$(node scripts/version.js --mac-build)
+          yarn electron-builder --config config/electron-builder.mas.js --mac --universal --publish never \
+            --config.mas.provisioningProfile="$MAS_PROVISIONING_PROFILE_PATH" \
+            --config.buildVersion="$BUILD_NUMBER"
+
+          PKG_PATH=$(find dist -type f -name 'AI-Gist-*-Mac-App-Store-*.pkg' -print -quit)
+          if [[ -z "$PKG_PATH" ]]; then
+            echo '::error::Mac App Store package was not produced.'
+            exit 1
+          fi
+          pkgutil --check-signature "$PKG_PATH"
+          echo "MAS_PKG_PATH=$PKG_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload Mac App Store package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-app-store-package
+          path: dist/**/AI-Gist-*-Mac-App-Store-*.pkg
+          if-no-files-found: error
+
+      - name: Upload to App Store Connect
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          if xcrun --find altool >/dev/null 2>&1; then
+            xcrun altool --validate-app --type macos --file "$MAS_PKG_PATH" \
+              --username "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD"
+            xcrun altool --upload-app --type macos --file "$MAS_PKG_PATH" \
+              --username "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD"
+          else
+            TRANSPORTER=$(xcrun --find iTMSTransporter)
+            "$TRANSPORTER" -m verify -assetFile "$MAS_PKG_PATH" \
+              -u "$APPLE_ID" -p "$APPLE_APP_SPECIFIC_PASSWORD" -v informational
+            "$TRANSPORTER" -m upload -assetFile "$MAS_PKG_PATH" \
+              -u "$APPLE_ID" -p "$APPLE_APP_SPECIFIC_PASSWORD" -v informational
+          fi
+
+      - name: Cleanup signing keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+  build-linux-store:
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.version == 'linux-store-build' || github.event.inputs.version == 'linux-store')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Build Snap package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: yarn build:store:linux
+
+      - name: Locate Snap package
+        id: snap
+        shell: bash
+        run: |
+          SNAP_PATH=$(find dist -maxdepth 1 -type f -name 'AI-Gist-*-Linux-Snap-amd64.snap' -print -quit)
+          if [[ -z "$SNAP_PATH" ]]; then
+            echo '::error::Snap package was not produced.'
+            exit 1
+          fi
+          echo "path=$SNAP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Snap artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-snap-package
+          path: ${{ steps.snap.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish to Snap Store stable channel
+        if: github.event.inputs.version == 'linux-store'
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.snap.outputs.path }}
+          release: stable
+
   create-release:
+    if: github.event_name != 'workflow_dispatch' || (github.event.inputs.version != 'store' && github.event.inputs.version != 'mac-store' && github.event.inputs.version != 'linux-store-build' && github.event.inputs.version != 'linux-store')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
+      release_created: ${{ steps.existing_release.outputs.exists == 'false' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -74,6 +266,8 @@ jobs:
             exit 1
           fi
 
+          # Annotated tags expose the target commit through the peeled ^{} ref;
+          # lightweight tags expose the commit directly on refs/tags/<version>.
           REMOTE_TAG_SHA=$(git ls-remote origin "refs/tags/$RELEASE_VERSION^{}" | awk 'NR == 1 { print $1 }')
           if [[ -z "$REMOTE_TAG_SHA" ]]; then
             REMOTE_TAG_SHA=$(git ls-remote origin "refs/tags/$RELEASE_VERSION" | awk 'NR == 1 { print $1 }')
@@ -87,6 +281,10 @@ jobs:
 
           echo "Using existing tag $RELEASE_VERSION at $CHECKOUT_SHA; no tag will be created or pushed."
 
+      # A rerun may find a draft or published Release for this tag. Preserve
+      # its hand-edited notes and existing assets; downstream jobs may only
+      # add installers that are still missing. The version is always exposed
+      # so a failed first run can be resumed from the same tag.
       - name: Check for an existing release
         id: existing_release
         env:
@@ -100,6 +298,9 @@ jobs:
             echo 'exists=false' >> "$GITHUB_OUTPUT"
           fi
 
+      # The release body is intentionally omitted: GitHub's generated notes
+      # are the single source of truth for what changed. Installation and
+      # troubleshooting instructions belong in documentation.
       - name: Create Draft Release
         if: steps.existing_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v3
@@ -107,9 +308,313 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.get_version.outputs.version }}
           name: AI Gist ${{ steps.get_version.outputs.version }}
-          draft: false
+          draft: true
           prerelease: false
           generate_release_notes: true
+
+  build-mac:
+    needs: create-release
+    if: needs.create-release.result == 'success'
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+
+      - run: yarn install --frozen-lockfile
+      - run: npm install -g typescript
+
+      - name: Check macOS signing configuration
+        id: mac-signing
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          MISSING=()
+          [[ -z "$MAC_CSC_LINK" ]] && MISSING+=(MAC_CSC_LINK)
+          [[ -z "$MAC_CSC_KEY_PASSWORD" ]] && MISSING+=(MAC_CSC_KEY_PASSWORD)
+          [[ -z "$APPLE_ID" ]] && MISSING+=(APPLE_ID)
+          [[ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]] && MISSING+=(APPLE_APP_SPECIFIC_PASSWORD)
+          [[ -z "$APPLE_TEAM_ID" ]] && MISSING+=(APPLE_TEAM_ID)
+
+          if [[ ${#MISSING[@]} -eq 0 ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### macOS (${{ matrix.arch }}) 签名状态：✅ 将执行 Developer ID 签名 + Apple 公证"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::macOS signing credentials are incomplete (missing: ${MISSING[*]}); publishing an unsigned compatibility build."
+            {
+              echo "### macOS (${{ matrix.arch }}) 签名状态：⚠️ 未签名兼容构建"
+              echo ""
+              echo "缺少 Secrets：\`${MISSING[*]}\`"
+              echo ""
+              echo "产物将以 \`-unsigned\` 后缀发布（仅 ad-hoc 签名，未公证），用户需执行 \`xattr -cr\` 才能打开。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build, sign, and notarize (macOS)
+        if: steps.mac-signing.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PYTHON: python3
+          npm_config_python: python3
+        run: |
+          node scripts/build.js
+          yarn electron-builder --config config/electron-builder.json --mac --${{ matrix.arch }} --config.mac.notarize=true --publish never
+
+      - name: Verify macOS signature and notarization
+        if: steps.mac-signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          APP_PATH=$(find dist -maxdepth 2 -type d -name '*.app' -print -quit)
+          if [[ -z "$APP_PATH" ]]; then
+            echo '::error::Built .app was not found for signature verification.'
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          spctl --assess --type execute --verbose=2 "$APP_PATH"
+          echo "- ✅ \`$APP_PATH\` 通过 codesign 校验、公证票据（staple）校验与 Gatekeeper 评估" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build unsigned compatibility package (macOS)
+        if: steps.mac-signing.outputs.available != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          PYTHON: python3
+          npm_config_python: python3
+        run: |
+          node scripts/build.js
+          yarn electron-builder --config config/electron-builder.json --mac --${{ matrix.arch }} --publish never \
+            --config.afterSign=scripts/adhoc-sign-mac.js \
+            --config.mac.artifactName='AI-Gist-${version}-macOS-${arch}-unsigned.${ext}'
+
+      - name: Upload macOS installer if missing
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          RELEASE_VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          shopt -s nullglob
+          ARTIFACTS=(dist/AI-Gist-*.dmg)
+          if (( ${#ARTIFACTS[@]} == 0 )); then
+            echo '::error::No macOS installer was produced.'
+            exit 1
+          fi
+
+          EXISTING_ASSETS=$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name')
+          for artifact in "${ARTIFACTS[@]}"; do
+            asset=$(basename "$artifact")
+            if grep -Fqx "$asset" <<< "$EXISTING_ASSETS"; then
+              echo "Skipping existing Release asset $asset"
+            else
+              gh release upload "$RELEASE_VERSION" "$artifact" --repo "$GITHUB_REPOSITORY"
+              EXISTING_ASSETS+=$'\n'"$asset"
+            fi
+          done
+
+  build-windows:
+    needs: create-release
+    if: needs.create-release.result == 'success'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+
+      - run: yarn install --frozen-lockfile
+      - run: npm install -g typescript
+
+      - name: Build unsigned Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          node scripts/build.js
+          yarn electron-builder --config config/electron-builder.json --win --publish never
+
+      - name: Check SignPath configuration
+        id: signpath
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) { $missing += 'SIGNPATH_API_TOKEN' }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID)) { $missing += 'SIGNPATH_ORGANIZATION_ID' }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_PROJECT_SLUG)) { $missing += 'SIGNPATH_PROJECT_SLUG' }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_SIGNING_POLICY_SLUG)) { $missing += 'SIGNPATH_SIGNING_POLICY_SLUG' }
+
+          if ($missing.Count -eq 0) {
+            "available=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "### Windows 签名状态：✅ 将提交 SignPath 签名请求" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else {
+            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Warning ("SignPath credentials are incomplete (missing: {0}); publishing an unsigned compatibility build." -f ($missing -join ', '))
+            "### Windows 签名状态：⚠️ 未签名兼容构建" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            ("缺少 Secrets：``{0}``" -f ($missing -join ', ')) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            "安装包将以 ``-unsigned`` 后缀发布，安装时会触发 SmartScreen 提示（更多信息 → 仍要运行）。" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+
+      - name: Upload unsigned installer for origin verification
+        if: steps.signpath.outputs.available == 'true'
+        id: upload-unsigned-windows
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-windows-installer
+          path: dist/AI-Gist-*-Windows-Setup.exe
+          if-no-files-found: error
+
+      - name: Submit Windows installer to SignPath
+        if: steps.signpath.outputs.available == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-windows.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/signed
+
+      - name: Publish Windows installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          RELEASE_VERSION: ${{ needs.create-release.outputs.version }}
+          SIGNED: ${{ steps.signpath.outputs.available }}
+        run: |
+          if ($env:SIGNED -eq 'true') {
+            $installer = Get-ChildItem -Path dist/signed -Filter 'AI-Gist-*-Windows-Setup.exe' -Recurse | Select-Object -First 1
+            if (-not $installer) {
+              throw 'Signed Windows installer was not found.'
+            }
+
+            $sig = Get-AuthenticodeSignature -FilePath $installer.FullName
+            if ($sig.Status -ne 'Valid') {
+              throw "Signed installer failed Authenticode verification: $($sig.Status) $($sig.StatusMessage)"
+            }
+            ("- ✅ Authenticode 校验通过，签名者：``{0}``" -f $sig.SignerCertificate.Subject) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else {
+            $installer = Get-ChildItem -Path dist -Filter 'AI-Gist-*-Windows-Setup.exe' | Select-Object -First 1
+            if (-not $installer) {
+              throw 'Windows installer was not found.'
+            }
+
+            $unsignedName = $installer.Name -replace '\.exe$', '-unsigned.exe'
+            $installer = Rename-Item -Path $installer.FullName -NewName $unsignedName -PassThru
+          }
+
+          $existingAssets = @(gh release view $env:RELEASE_VERSION --repo $env:GITHUB_REPOSITORY --json assets --jq '.assets[].name')
+          if ($existingAssets -contains $installer.Name) {
+            Write-Host "Skipping existing Release asset $($installer.Name)"
+          } else {
+            gh release upload $env:RELEASE_VERSION $installer.FullName --repo $env:GITHUB_REPOSITORY
+          }
+
+  build-linux:
+    needs: create-release
+    if: needs.create-release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Python 3
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel
+
+      - run: yarn install --frozen-lockfile
+      - run: npm install -g typescript
+
+      - name: Build Linux installer
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          node scripts/build.js
+          yarn electron-builder --config config/electron-builder.json --linux --publish never
+
+      - name: Upload Linux installer if missing
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          RELEASE_VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          shopt -s nullglob
+          ARTIFACTS=(dist/AI-Gist-*-linux.AppImage)
+          if (( ${#ARTIFACTS[@]} == 0 )); then
+            echo '::error::No Linux AppImage was produced.'
+            exit 1
+          fi
+
+          EXISTING_ASSETS=$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name')
+          for artifact in "${ARTIFACTS[@]}"; do
+            asset=$(basename "$artifact")
+            if grep -Fqx "$asset" <<< "$EXISTING_ASSETS"; then
+              echo "Skipping existing Release asset $asset"
+            else
+              gh release upload "$RELEASE_VERSION" "$artifact" --repo "$GITHUB_REPOSITORY"
+              EXISTING_ASSETS+=$'\n'"$asset"
+            fi
+          done
 
   build-android:
     needs: create-release
@@ -133,6 +638,8 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: npm install -g typescript
 
+      # Android 的 versionCode/versionName 写在 build.gradle 里，靠
+      # scripts/sync-version.js 与 package.json 保持一致，这里防止忘记同步。
       - name: Verify native version numbers
         run: yarn version:check
 
@@ -195,8 +702,13 @@ jobs:
               --repo ${{ github.repository }}
           fi
 
+  # electron-builder uploads latest*.yml and *.blockmap for auto-updaters.
+  # This app checks the Releases API and sends users to the release page, so
+  # those metadata files have no consumer and should not clutter downloads.
   prune-release-assets:
-    needs: [create-release, build-android]
+    needs: [create-release, build-mac, build-windows, build-linux, build-android]
+    # always() lets cleanup run after a partial platform failure. Existing
+    # Releases are resumed without deleting any metadata from their assets.
     if: always() && needs.create-release.result == 'success' && needs.create-release.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     steps:

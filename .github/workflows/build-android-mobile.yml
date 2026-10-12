@@ -1,0 +1,118 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # Android 的 versionCode/versionName 写在 build.gradle 里，靠
+      # scripts/sync-version.js 与 package.json 保持一致，这里防止忘记同步。
+      - name: Verify native version numbers
+        run: yarn version:check
+
+      - name: Build web assets
+        run: npx vite build --config config/vite.config.mobile.js
+
+      - name: Configure Android SDK path
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+
+      - name: Fix Gradle distribution URL
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14.3-bin.zip|' \
+            android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Check signing configuration
+        id: signing
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "available=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Decode Keystore
+        if: steps.signing.outputs.available == 'true'
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Build Signed Release APK and AAB
+        if: steps.signing.outputs.available == 'true'
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease bundleRelease \
+            -Pandroid.injected.signing.store.file=${{ github.workspace }}/android/app/release.keystore \
+            -Pandroid.injected.signing.store.password="${{ secrets.ANDROID_KEY_STORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+      - name: Build Debug APK and AAB (No Signing Config)
+        if: steps.signing.outputs.available != 'true'
+        working-directory: android
+        run: ./gradlew assembleDebug bundleDebug
+
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          # 每次 run/attempt 唯一，避免同名 tag 被改写导致协作者 git pull --tags 报 would clobber
+          if [ "${{ steps.signing.outputs.available }}" == "true" ]; then
+            echo "tag=v${VERSION}-mobile-${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v${VERSION}-debug-${{ github.run_id }}-${{ github.run_attempt }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Collect artifacts
+        run: |
+          TAG="${{ steps.get_version.outputs.tag }}"
+          if [ "${{ steps.signing.outputs.available }}" == "true" ]; then
+            APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+            AAB=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -1)
+          else
+            APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -1)
+            AAB=$(find android/app/build/outputs/bundle/debug -name "*.aab" | head -1)
+          fi
+          cp "$APK" "AI-Gist-${TAG}.apk"
+          cp "$AAB" "AI-Gist-${TAG}.aab"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: "AI Gist ${{ steps.get_version.outputs.tag }}"
+          draft: true
+          prerelease: false
+          generate_release_notes: false
+          files: |
+            AI-Gist-${{ steps.get_version.outputs.tag }}.apk
+            AI-Gist-${{ steps.get_version.outputs.tag }}.aab
