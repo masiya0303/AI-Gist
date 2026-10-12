@@ -833,6 +833,7 @@
     "cancelSelection": "Cancel Selection",
     "cancelShortcutTrigger": "Cancel Shortcut Trigger",
     "categories": "Categories",
+    "categoriesBar": "Filter by category",
     "category": "Category",
     "categoryAndTags": "Category and Tags",
     "categoryCreatedFailed": "Failed to create category",

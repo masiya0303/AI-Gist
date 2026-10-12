@@ -54,6 +54,18 @@
         <h1 class="mobile-large-title-text" aria-hidden="true">{{ t('mainPage.menu.prompts') }}</h1>
       </div>
 
+      <!--
+        分类频道栏：把「全部 + 所有分类」平铺在列表上方横向滑动，随时一键切换，
+        不必像之前那样每次都重新打开漏斗图标的筛选弹层。分类在后台被删除时
+        （见下方 watch(categories)）会清空失效的选中态并恢复为「全部分类」。
+      -->
+      <mobile-category-bar
+        v-if="categories.length > 0"
+        v-model:selected-id="selectedCategory"
+        :categories="categories"
+        :counts="categoryCounts"
+      ></mobile-category-bar>
+
       <!-- 筛选标签 -->
       <div v-if="hasActiveFilters" class="filter-chips">
         <ion-chip v-if="selectedCategory" @click="clearCategory">
@@ -313,9 +325,10 @@ import { api } from '~/lib/api'
 import { onDataChange } from '~/lib/services/data-change-events'
 import { presentMobileToast } from '~/lib/utils/mobile-toast'
 import { getTagsArray } from '~/lib/utils/tag-colors'
-import type { Prompt, Category } from '@shared/types'
+import type { Prompt, CategoryWithRelations } from '@shared/types'
 import { useRouter } from 'vue-router'
 import MobileWaterfallView from '~/components/mobile/MobileWaterfallView.vue'
+import MobileCategoryBar from '~/components/mobile/MobileCategoryBar.vue'
 import EmptyPromptsIllustration from '~/components/mobile/illustrations/EmptyPromptsIllustration.vue'
 import NoSearchResultsIllustration from '~/components/mobile/illustrations/NoSearchResultsIllustration.vue'
 import { useCollapsingHeader } from '~/composables/useCollapsingHeader'
@@ -338,7 +351,8 @@ let promptLoadSequence = 0
 
 // 状态
 const prompts = ref<Prompt[]>([])
-const categories = ref<Category[]>([])
+// getAll 返回的是带关联提示词的分类，列表顶部频道栏据此展示每个分类的条数
+const categories = ref<CategoryWithRelations[]>([])
 const loading = ref(true)
 const searchText = ref('')
 // 搜索栏展开状态：默认收起为左上角图标，点击后原地展开为 ion-searchbar
@@ -370,6 +384,18 @@ const sortOptions = computed(() => [
   { label: t('promptManagement.sortByCreatedAt'), value: 'createdAt' },
   { label: t('promptManagement.sortByTitle'), value: 'title' }
 ])
+
+// 每个分类下的提示词总数，给顶部分类频道栏做计数徽标（与桌面端分类列表一致）
+const categoryCounts = computed(() => {
+  const counts: Record<number, number> = {}
+  for (const category of categories.value) {
+    const count = category.prompts?.length ?? 0
+    if (category.id && count > 0) {
+      counts[category.id] = count
+    }
+  }
+  return counts
+})
 
 // 是否有激活的筛选
 const hasActiveFilters = computed(() => {
@@ -603,6 +629,17 @@ watch([showFavoritesOnly, selectedTag], () => {
   loadPrompts()
 })
 
+// 分类被删除（本页或 AI 配置页/其他页面改动分类）后，选中态可能指向一个已不存在的 id。
+// 保留它会让列表按一个查不到任何结果的筛选条件加载，频道栏也高亮不出当前项，
+// 这里在分类列表刷新后兜底清空并恢复为「全部分类」。
+watch(categories, async () => {
+  if (selectedCategory.value === null) return
+  const stillExists = categories.value.some(category => category.id === selectedCategory.value)
+  if (stillExists) return
+  selectedCategory.value = null
+  await loadPrompts()
+})
+
 const showToast = async (message: string, color: string = 'success') => {
   await presentMobileToast(message, color)
 }
@@ -648,10 +685,13 @@ const scheduleRealtimeRefresh = () => {
 const unsubscribeDataChanges = onDataChange(['prompts', 'categories', 'ai_configs'], scheduleRealtimeRefresh)
 
 // 初始化
+// 分类、提示词、AI 配置三者互不依赖，并行拉取缩短首屏等待
 onMounted(async () => {
-  await loadCategories()
-  await loadPrompts()
-  await refreshAIConfigStatus()
+  await Promise.all([
+    loadCategories(),
+    loadPrompts(),
+    refreshAIConfigStatus()
+  ])
 })
 
 // 离开页面时保存滚动位置

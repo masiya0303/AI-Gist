@@ -833,6 +833,7 @@
     "cancelSelection": "Annulla selezione",
     "cancelShortcutTrigger": "Annulla l'attivazione della scorciatoia",
     "categories": "Categorie",
+    "categoriesBar": "Filtra per categoria",
     "category": "Categoria",
     "categoryAndTags": "Categoria e tag",
     "categoryCreatedFailed": "Impossibile creare la categoria",

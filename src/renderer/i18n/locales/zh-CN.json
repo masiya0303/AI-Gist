@@ -833,6 +833,7 @@
     "cancelSelection": "取消选择",
     "cancelShortcutTrigger": "取消快捷键触发",
     "categories": "分类",
+    "categoriesBar": "按分类切换",
     "category": "分类",
     "categoryAndTags": "分类与标签",
     "categoryCreatedFailed": "创建分类失败",

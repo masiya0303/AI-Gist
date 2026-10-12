@@ -833,6 +833,7 @@
     "cancelSelection": "選択をキャンセル",
     "cancelShortcutTrigger": "ショートカットキートリガーをキャンセルします",
     "categories": "カテゴリ",
+    "categoriesBar": "分類で切り替え",
     "category": "カテゴリ",
     "categoryAndTags": "カテゴリとタグ",
     "categoryCreatedFailed": "カテゴリ作成に失敗",
