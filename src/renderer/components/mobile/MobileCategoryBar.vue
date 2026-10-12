@@ -1,6 +1,6 @@
 <template>
   <div class="mobile-category-bar" role="group" :aria-label="t('promptManagement.categoriesBar')">
-    <ion-scroll class="mobile-category-bar__scroller" scroll-x :show-scrollbar-y="false">
+    <div class="mobile-category-bar__scroller">
       <button
         type="button"
         class="mobile-category-bar__chip"
@@ -23,12 +23,11 @@
         <span class="mobile-category-bar__name">{{ category.name }}</span>
         <span v-if="getCount(category.id)" class="mobile-category-bar__count">{{ getCount(category.id) }}</span>
       </button>
-    </ion-scroll>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonScroll } from '@ionic/vue'
 import { useI18n } from '~/composables/useI18n'
 import type { Category } from '@shared/types'
 
@@ -82,8 +81,19 @@ const select = (categoryId: number | null) => {
 }
 
 .mobile-category-bar__scroller {
-  /* 轨道上下各留 2px，让纵向滚动指示器不会贴到胶囊边缘 */
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 分类很多时只在水平方向滚动，不挤压标题栏和列表 */
+  -webkit-overflow-scrolling: touch;
+  /* 隐藏滚动条：手指/滚轮滑动即可，条状指示器会显得拥挤 */
+  scrollbar-width: none;
   padding-block: 2px;
+}
+
+.mobile-category-bar__scroller::-webkit-scrollbar {
+  display: none;
 }
 
 .mobile-category-bar__chip {

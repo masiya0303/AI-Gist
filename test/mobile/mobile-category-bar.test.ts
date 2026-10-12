@@ -10,8 +10,11 @@ const promptPage = read('src/renderer/pages/mobile/MobilePromptPage.vue')
 
 describe('移动端分类频道栏组件', () => {
   it('把全部分类横向平铺在同一个可滚动轨道上', () => {
-    // ion-scroll + scroll-x：分类多了也能横向滑动，而不是把列表挤成两行
-    expect(categoryBar).toMatch(/<ion-scroll class="mobile-category-bar__scroller" scroll-x/)
+    // 原生横向滚动轨道：分类多了左右滑动，而不是把列表挤成两行。
+    // 这里刻意不用 ion-scroll——@ionic/vue 没有导出 IonScroll，引用它会让
+    // vite build 直接失败（rollup: "IonScroll" is not exported）。
+    expect(categoryBar).toMatch(/<div class="mobile-category-bar__scroller">/)
+    expect(categoryBar).not.toMatch(/IonScroll|ion-scroll/)
 
     expect(categoryBar).toMatch(/v-for="category in categories"/)
     expect(categoryBar).toMatch(/category\.name/)
@@ -41,6 +44,13 @@ describe('移动端分类频道栏组件', () => {
     expect(activeStyle).toContain('font-weight: 600')
     expect(activeStyle).not.toContain('box-shadow')
     expect(activeStyle).not.toContain('--ion-chip')
+  })
+
+  it('滚动轨道用原生 overflow-x，不依赖 Ionic 滚动组件', () => {
+    const scrollerStyle = categoryBar.match(/\.mobile-category-bar__scroller\s*\{([\s\S]*?)\n\}/)?.[1] || ''
+    expect(scrollerStyle).toContain('overflow-x: auto')
+    expect(scrollerStyle).toContain('-webkit-overflow-scrolling: touch')
+    expect(scrollerStyle).toContain('scrollbar-width: none')
   })
 
   it('频道文字使用移动端字号阶梯而不是裸 px', () => {
