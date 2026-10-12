@@ -1200,7 +1200,8 @@
     "viewMode": "view mode",
     "viewModeList": "list view",
     "viewModeWaterfall": "Waterfall view",
-    "warning": "warn"
+    "warning": "warn",
+    "manageCategories": "Manage Categories"
   },
   "promptWorkspace": {
     "addDescription": "Add a description",

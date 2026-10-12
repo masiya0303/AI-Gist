@@ -82,6 +82,44 @@
                 <span class="pill-dot" :style="{ background: category.color || 'var(--content-tertiary)' }"></span>
                 {{ category.name }}
               </button>
+              <!-- 新建分类内联入口 -->
+              <template v-if="!showInlineCategory">
+                <button
+                  type="button"
+                  class="pill pill-add"
+                  @click="showInlineCategory = true"
+                >
+                  <ion-icon :icon="add" slot="start"></ion-icon>
+                  {{ t('promptManagement.createCategory') }}
+                </button>
+              </template>
+              <template v-else>
+                <div class="inline-category-form">
+                  <ion-input
+                    v-model="newCategoryName"
+                    :placeholder="t('promptManagement.categoryNamePlaceholder')"
+                    size="small"
+                    @keyup.enter="handleInlineCreateCategory"
+                  ></ion-input>
+                  <ion-button
+                    type="button"
+                    size="small"
+                    fill="solid"
+                    @click="handleInlineCreateCategory"
+                    :disabled="!newCategoryName.trim()"
+                  >
+                    {{ t('common.save') }}
+                  </ion-button>
+                  <ion-button
+                    type="button"
+                    size="small"
+                    fill="outline"
+                    @click="showInlineCategory = false; newCategoryName = ''"
+                  >
+                    {{ t('common.cancel') }}
+                  </ion-button>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -270,6 +308,9 @@ const categories = ref<Category[]>([])
 const popularTags = ref<string[]>([])
 const showTagsModal = ref(false)
 const tagSearchText = ref('')
+// 内联新建分类
+const showInlineCategory = ref(false)
+const newCategoryName = ref('')
 
 // 图片相关
 const imageBlobs = ref<Blob[]>([])
@@ -479,6 +520,28 @@ const loadData = async () => {
 // 选择分类
 const selectCategory = (categoryId: number | null) => {
   formData.value.categoryId = categoryId
+}
+
+// 内联创建分类
+const handleInlineCreateCategory = async () => {
+  if (!newCategoryName.value.trim()) return
+  try {
+    const created = await api.categories.create.mutate({
+      name: newCategoryName.value.trim(),
+      color: '#18a058',
+      uuid: '',
+      isActive: true,
+      description: ''
+    })
+    categories.value.push(created)
+    formData.value.categoryId = created.id
+    newCategoryName.value = ''
+    showInlineCategory.value = false
+    await showToast(t('promptManagement.categoryCreatedSuccess'))
+  } catch (error) {
+    console.error('创建分类失败:', error)
+    await showToast(t('promptManagement.categoryCreatedFailed'), 'danger')
+  }
 }
 
 // 切换标签
@@ -768,6 +831,22 @@ onUnmounted(() => {
 
 .pill-add ion-icon {
   font-size: 14px;
+}
+
+.inline-category-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inline-category-form ion-input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.inline-category-form ion-button {
+  flex: 0 0 auto;
 }
 
 .hidden-file-input {

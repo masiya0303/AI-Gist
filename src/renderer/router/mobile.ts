@@ -91,6 +91,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../pages/mobile/MobileAIGeneratorPage.vue')
   },
   {
+    path: '/categories',
+    component: () => import('../pages/mobile/MobileCategoryPage.vue')
+  },
+  {
     path: '/mobile/about',
     component: () => import('../pages/mobile/MobileAboutPage.vue')
   }

@@ -1200,7 +1200,8 @@
     "viewMode": "視圖模式",
     "viewModeList": "清單視圖",
     "viewModeWaterfall": "瀑布流視圖",
-    "warning": "警告"
+    "warning": "警告",
+    "manageCategories": "管理分類"
   },
   "promptWorkspace": {
     "addDescription": "新增描述",

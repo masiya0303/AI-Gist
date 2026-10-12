@@ -246,6 +246,12 @@
               color="primary"
             ></ion-icon>
           </ion-item>
+          <!-- 分类管理入口 -->
+          <ion-item button @click="navigateToCategories">
+            <ion-icon :icon="folderOpenOutline" slot="start"></ion-icon>
+            <ion-label>{{ t('promptManagement.manageCategories') }}</ion-label>
+            <ion-icon :icon="chevronForward" slot="end"></ion-icon>
+          </ion-item>
         </ion-list>
       </ion-content>
     </ion-modal>
@@ -297,7 +303,9 @@ import {
   sparklesOutline,
   listOutline,
   gridOutline,
-  searchOutline
+  searchOutline,
+  folderOpenOutline,
+  chevronForward
 } from 'ionicons/icons'
 import { useI18n } from '~/composables/useI18n'
 import { useAIConfigStatus } from '~/composables/useAIConfigStatus'
@@ -501,6 +509,12 @@ const handleCategoryFilter = (categoryId: number | null) => {
   selectedCategory.value = categoryId
   showFilterModal.value = false
   loadPrompts()
+}
+
+// 导航到分类管理页面
+const navigateToCategories = () => {
+  showFilterModal.value = false
+  router.push('/categories')
 }
 
 // 清除分类筛选

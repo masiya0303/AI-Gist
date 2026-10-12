@@ -1200,7 +1200,8 @@
     "viewMode": "modalità di visualizzazione",
     "viewModeList": "vista elenco",
     "viewModeWaterfall": "Vista sulla cascata",
-    "warning": "Avvertenza"
+    "warning": "Avvertenza",
+    "manageCategories": "Gestisci categorie"
   },
   "promptWorkspace": {
     "addDescription": "Aggiungi una descrizione",

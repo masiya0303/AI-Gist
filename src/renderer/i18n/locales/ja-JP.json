@@ -1200,7 +1200,8 @@
     "viewMode": "ビューモード",
     "viewModeList": "リストビュー",
     "viewModeWaterfall": "滝の眺め",
-    "warning": "警告"
+    "warning": "警告",
+    "manageCategories": "カテゴリ管理"
   },
   "promptWorkspace": {
     "addDescription": "説明を追加",
