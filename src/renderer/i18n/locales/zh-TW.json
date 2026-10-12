@@ -903,6 +903,8 @@
       "contentEmpty": "內容為空",
       "copyAIResponse": "複製AI響應",
       "copyContent": "複製內容",
+      "copyDescription": "複製描述",
+      "copyDescriptionSuccess": "描述已複製",
       "copyFailed": "複製失敗",
       "copyPrompt": "複製提示詞",
       "copyPromptDesc": "複製預設提示詞到剪貼板",

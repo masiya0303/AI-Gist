@@ -113,6 +113,11 @@
         内容最后才能看到「复制提示词」按钮。
       -->
       <div v-if="prompt" class="action-buttons" slot="fixed">
+        <!-- 有描述就多给一个按钮，复制描述正文；两个按钮文案已标明各复制哪一块 -->
+        <ion-button v-if="prompt.description" expand="block" @click="copyDescription">
+          <ion-icon slot="start" :icon="copyOutline"></ion-icon>
+          {{ t('promptManagement.detailModal.copyDescription') }}
+        </ion-button>
         <ion-button expand="block" @click="copyContent">
           <ion-icon slot="start" :icon="copyOutline"></ion-icon>
           {{ t('promptManagement.detailModal.copyContent') }}
@@ -349,6 +354,20 @@ const copyContent = async () => {
     showToast(t('promptManagement.detailModal.copySuccess'))
   } catch (error) {
     console.error('复制失败:', error)
+    showToast(t('promptManagement.detailModal.copyFailed'), 'danger')
+  }
+}
+
+// 只复制描述正文，不记使用次数：useCount 统计的是提示词正文被取用的次数
+const copyDescription = async () => {
+  const text = prompt.value?.description?.trim()
+  if (!text) return
+
+  try {
+    await navigator.clipboard.writeText(text)
+    showToast(t('promptManagement.detailModal.copyDescriptionSuccess'))
+  } catch (error) {
+    console.error('复制描述失败:', error)
     showToast(t('promptManagement.detailModal.copyFailed'), 'danger')
   }
 }

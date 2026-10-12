@@ -903,6 +903,8 @@
       "contentEmpty": "内容が空です",
       "copyAIResponse": "AI応答をコピー",
       "copyContent": "コンテンツをコピーする",
+      "copyDescription": "説明をコピー",
+      "copyDescriptionSuccess": "説明をコピーしました",
       "copyFailed": "コピーに失敗しました",
       "copyPrompt": "プロンプトをコピー",
       "copyPromptDesc": "プリセットプロンプトをクリップボードにコピー",

@@ -903,6 +903,8 @@
       "contentEmpty": "内容为空",
       "copyAIResponse": "复制AI响应",
       "copyContent": "复制内容",
+      "copyDescription": "复制描述",
+      "copyDescriptionSuccess": "描述已复制",
       "copyFailed": "复制失败",
       "copyPrompt": "复制提示词",
       "copyPromptDesc": "复制提示词",

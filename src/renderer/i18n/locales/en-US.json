@@ -903,6 +903,8 @@
       "contentEmpty": "Content is empty",
       "copyAIResponse": "Copy AI response",
       "copyContent": "Copy Content",
+      "copyDescription": "Copy description",
+      "copyDescriptionSuccess": "Description copied",
       "copyFailed": "Copy failed",
       "copyPrompt": "Copy prompt",
       "copyPromptDesc": "Copy prompt words",
