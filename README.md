@@ -1,13 +1,13 @@
+
 <div align="center">
 
 ![Logo](docs/images/logo.png)
 
 # AI Gist
 
-![100% 本地数据](https://img.shields.io/badge/数据存储-100%25本地-success?style=flat&logo=database&logoColor=white) ![AI 支持](https://img.shields.io/badge/AI-支持多模型-blue?style=flat&logo=openai&logoColor=white)  [![GitHub all releases](https://img.shields.io/github/downloads/yarin-zhang/AI-Gist/total?style=flat)](https://github.com/yarin-zhang/AI-Gist/releases)
+*本仓库是 [yarin-zhang/AI-Gist](https://github.com/yarin-zhang/AI-Gist) 的 fork，由 masiya0303 维护。上游项目版权归 Yarin Zhang 所有；完整许可条款见 [LICENSE](./LICENSE)。*
 
-![桌面端](https://img.shields.io/badge/桌面端-Windows%20%7C%20macOS%20%7C%20Linux-purple?style=flat&logo=electron&logoColor=white) ![移动端](https://img.shields.io/badge/移动端-Android%20%7C%20iOS-00A98F?style=flat&logo=capacitor&logoColor=white) 
-
+![License](https://img.shields.io/badge/license-AGPL--3.0-blue) ![数据存储](https://img.shields.io/badge/数据存储-100%25本地-success?logo=database&logoColor=white) ![AI 支持](https://img.shields.io/badge/AI-支持多模型-blue?logo=openai&logoColor=white) ![桌面端](https://img.shields.io/badge/桌面端-Windows%20%7C%20macOS%20%7C%20Linux-purple?logo=electron&logoColor=white) ![移动端](https://img.shields.io/badge/移动端-Android%20%7C%20iOS-00A98F?logo=capacitor&logoColor=white)
 
 ✨ AI Gist 是一款隐私优先的 AI 提示词管理工具，致力于让个人收藏的 AI 提示词能够发挥最大价值。
 
@@ -15,9 +15,26 @@
 
 ![主要截图](docs/images/image-main.png?v=202608170119)
 
-[🏠 访问官网](https://getaigist.com) | [🔗 GitHub 下载](https://github.com/yarin-zhang/AI-Gist/releases) | [🇬🇧 English README](docs/README.en.md)
+[🏠 访问官网](https://getaigist.com) · [📥 下载上游发布](https://github.com/yarin-zhang/AI-Gist/releases) · [🇬🇧 English README](docs/README.en.md)
 
 </div>
+
+## 🌱 关于本 Fork
+
+本仓库在上游基础上做增量维护，重点围绕**移动端体验**和**CI 稳定性**。桌面端行为与上游保持一致，未启用独立的 Release 流水线——安装包请从[上游发布页](https://github.com/yarin-zhang/AI-Gist/releases)获取。
+
+已在 `main` 分支合入的差异（截至当前）：
+
+| 版本 | 类型 | 说明 |
+|------|------|------|
+| 2.2.0（待发布） | `feat(mobile)` | 详情页描述也可复制——底部两个复制按钮 |
+| 2.1.5 | `fix(mobile)` | 修分类频道栏两个 bug：切分类不刷新、分类名重复显示两行 |
+| 2.1.4 | `fix(mobile)` | 分类频道栏改用原生横向滚动轨道，修复 `IonScroll` 不存在的构建失败 |
+| 2.1.4 | `test(ci)` | 新增 Ionic 具名导入静态校验，防止类似问题再次阻塞 CI |
+
+完整提交历史见 [git log](https://github.com/masiya0303/AI-Gist/commits/main)。
+
+---
 
 ## 📌 特点
 
@@ -63,13 +80,6 @@ AI Gist 关注隐私和数据安全，所有数据都存储在本地，并支持
 | ![Android](https://img.shields.io/badge/Android-APK-3DDC84?style=flat&logo=android&logoColor=white) | [Android APK](https://github.com/yarin-zhang/AI-Gist/releases/latest) |  | APK 安装包 |
 | ![iOS](https://img.shields.io/badge/iOS-App%20Store-000000?style=flat&logo=apple&logoColor=white) | | [App Store](https://apps.apple.com/cn/app/ai-gist/id6762559220) | App Store |
 
-如果 Github 下载较慢，可以尝试通过百度网盘、SourceForge 进行下载。
-
-| 镜像源 | 下载链接 | 说明 |
-|------|----------|------|
-| [<img src="https://img.shields.io/badge/百度网盘-下载-blue?logo=baidu&style=flat-square" alt="Baidu Download">](https://pan.baidu.com/s/10apxOpgNciADcKfhuli5sA?pwd=4321) | [百度网盘](https://pan.baidu.com/s/10apxOpgNciADcKfhuli5sA?pwd=4321) | 中国用户推荐 提取码：4321 |
-| [![Download AI-Gist](https://img.shields.io/badge/SourceForge-下载-green?logo=sourceforge&style=flat)](https://sourceforge.net/projects/ai-gist/files/latest/download) | [SourceForge](https://sourceforge.net/projects/ai-gist/files/latest/download) | 国际用户推荐 |
-
 ## 🚀 安装说明
 
 - **Windows：** 下载 `.exe` 文件后双击运行安装
@@ -82,20 +92,20 @@ AI Gist 关注隐私和数据安全，所有数据都存储在本地，并支持
 
 ### 管理提示词
 
-- 点击“新建提示词”
-- 输入提示词模板，用 `{{变量名}}` 来插入变量，AI Gist 会自动读取其中的变量。
+- 点击"新建提示词"
+- 输入提示词模板，用 `{{变量名}}` 来插入变量，AI Gist 会��动读取其中的变量。
 - 使用时直接选择模板，输入变量值。
-- 点击“复制内容”，即可自动记录使用历史。
+- 点击"复制内容"，即可自动记录使用历史。
 
 ### AI 生成提示词
 
 - 先在应用中添加 AI 模型（支持纯本地 Ollama、LM Studio 模型，以及常见的 OpenAI、DeepSeek 等在线模型）。
-- 在首页点击“AI 生成”按钮，可以通过 AI 模型生成提示词。
+- 在首页点击"AI 生成"按钮，可以通过 AI 模型生成提示词。
 
 ### AI 润色提示词
 
 - 先添加 AI 模型
-- 在编辑提示词页面对现有提示词进行快速润色，例如“提取变量”、“更具体”等。也可以自定义润色提示词。
+- 在编辑提示词页面对现有提示词进行快速润色，例如"提取变量"、"更具体"等。也可以自定义润色提示词。
 
 ## 开发说明
 
@@ -158,15 +168,15 @@ yarn build:linux    # 构建 Linux 安装包
 
 ## 贡献
 
-本项目主要由个人开发，所有代码完全开源。如果你喜欢这个项目，请点击右上角的 Star ⭐️ 来支持我！这将激励我继续改进和维护这个项目。
+本 fork 由 **masiya0303** 维护。上游 AI Gist 由 [Yarin Zhang](https://github.com/yarin-zhang) 个人开发，所有代码在 [AGPL-3.0](./LICENSE) 下开源。
 
-如果有问题或建议，欢迎在 GitHub 上提交 Issue 或 Pull Request。
+欢迎在 GitHub 上提交 Issue 或 Pull Request——特别是关于**移动端体验**、**构建流程**、**CI 稳定性**的建议和改动。
 
-欢迎加入 QQ 群，与开发者和其他用户交流使用心得、反馈问题和获取最新动态。
+修改前请先阅读：
 
-<p align="center">
-  <img src="docs/images/QQ-QRCode.png?v=202507031628" alt="QQ 群" width="200" />
-</p>
+- [AGENTS.md](./AGENTS.md) — AI Agent 与协作者必读规范（含发布流程、版本号规则、已踩过的坑）
+- [docs/AI_UI_DESIGN_PROMPT.md](./docs/AI_UI_DESIGN_PROMPT.md) — 桌面端 UI 设计规范（强制契约，新增 UI 必读）
+- [docs/versioning.md](./docs/versioning.md) — 版本号与 `buildRevision` 推导规则
 
 ## 应用截图
 
@@ -222,6 +232,17 @@ AI 快速调整
 
 </div>
 
+## 📖 相关文档
+
+- [项目架构指南](./docs/project-architecture.md)
+- [Web 本地部署与多端差异说明](./docs/web-deployment-and-platform-differences.md)
+- [移动端开发指南](./docs/mobile-development.md)
+- [GitHub Actions 自动构建与发布](./docs/github-actions.md)
+- [隐私政策](./PRIVACY.md) — 数据与隐私说明
+- [代码签名策略](./CODE_SIGNING_POLICY.md) — 发布签名与证书管理
+- [AI Agent 操作规范](./AGENTS.md) — Agent / 自动化工具必读
+
 ## 许可证
 
-本项目采用 [AGPL 许可证](./LICENSE)，请在使用时遵守相关条款。
+本项目采用 [AGPL-3.0](./LICENSE) 许可证。本 fork 完整保留上游的所有版权与许可证声明；分发本 fork 的派生作品须同样遵守 AGPL-3.0 条款。
+
